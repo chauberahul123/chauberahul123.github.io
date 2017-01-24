@@ -1,63 +1,107 @@
- (function() {
+(function() {
   "use strict";
 
-  angular.module("ShoppingListCheckOff", [])
-    .controller("ToBuyShoppingController", ToBuyShoppingController)
-    .controller("AlreadyBoughtShoppingController", AlreadyBoughtShoppingController)
-    .service("ShoppingListCheckOffService", ShoppingListCheckOffService);
+  angular.module("NarrowItDownApp", [])
+    .controller("NarrowItDownController", NarrowItDownController)
+    .service("MenuSearchService", MenuSearchService)
+    .directive("foundItems", FoundItemsDirective)
+    .constant("ApiBasePath", "https://davids-restaurant.herokuapp.com");
 
+  /*** CONTROLLERS ***********************************************************/
+  NarrowItDownController.$inject = ["MenuSearchService"];
+  function NarrowItDownController(MenuSearchService) {
+    var ctrl = this;
+    ctrl.searchFor = "";
+    ctrl.searchResult = ""; //Set to empty string if all OK
+    ctrl.found = [];
 
-  ToBuyShoppingController.$inject = ["ShoppingListCheckOffService"];
-  function ToBuyShoppingController(ShoppingListCheckOffService) {
-    var list = this;
+    /*--- Methods -----------------------------------------------------------*/
+    ctrl.search = function() {
+      //If textbox not empty - do search...
+      if(ctrl.searchFor && ctrl.searchFor.length > 0) {
+        ctrl.searchResult = "";
+        var promise = MenuSearchService.getMatchedMenuItems(ctrl.searchFor);
+        
+        promise.then(function(result) {
+          ctrl.found = result;
+          if(ctrl.found.length === 0) {
+            ctrl.searchResult = "Nothing found (matching \"" + ctrl.searchFor + "\")";
+          }
+        });
+      }
+      else
+      {
+        ctrl.searchResult = "Nothing found";
+      }
+    };
 
-    list.items = ShoppingListCheckOffService.getItemsToBuy();
-
-    list.checkOff = function(itemIndex) {
-      console.log("Checking off item ", itemIndex);
-      ShoppingListCheckOffService.checkOff(itemIndex);
+    ctrl.dontWant = function(index) {
+      console.log("Index: ", index);
+      ctrl.found.splice(index, 1);
     };
   }
 
-
-  AlreadyBoughtShoppingController.$inject = ["ShoppingListCheckOffService"];
-  function AlreadyBoughtShoppingController(ShoppingListCheckOffService) {
-    var list = this;
-
-    list.items = ShoppingListCheckOffService.getItemsBought();
-  }
-
-
-  // ShoppingListCheckOffService.$inject = [];
-  function ShoppingListCheckOffService() {
+  /*** SERVICES **************************************************************/
+  MenuSearchService.$inject = ["$http", "ApiBasePath"];
+  function MenuSearchService($http, ApiBasePath) {
     var service = this;
 
-    var itemsToBuy = [ 
-      { name: "Haggis", quantity: 1 }, 
-      { name: "Neeps", quantity: 2 }, 
-      { name: "Tatties", quantity: 3 }, 
-      { name: "Drams", quantity: 4 }, 
-      { name: "Tablet", quantity: 5 }, 
-      { name: "Fudge", quantity: 6 }, 
-      { name: "Jelly Babies", quantity: 7 }, 
-      { name: "Salt & Vinegar Crisps", quantity: 8 }, 
-      { name: "Ale", quantity: 9 }, 
-      { name: "Plum Pudding", quantity: 10 } 
-    ];
+    //TODO - Cache menu list....
+    // service.getMenuItems = function() {
+    //   return $http({
+    //     method: "GET",
+    //     url: (ApiBasePath + "/menu_items.json")
+    //   });
+    // };
 
-    var itemsBought = [];
+    service.getMatchedMenuItems = function(searchTerm) {
+      return $http({
+        method: "GET",
+        url: (ApiBasePath + "/menu_items.json")
+      })
+        .then(function(response){
+          var menuItems = response.data;
+          var foundItems = filterOnDescription(menuItems.menu_items, searchTerm);
 
-    service.getItemsToBuy = function () {
-      return itemsToBuy;
+          return foundItems;
+        });
     };
 
-    service.getItemsBought = function () {
-      return itemsBought;
+    //Return list where desciption contains searchTerm
+    function filterOnDescription(list, searchTerm) {
+      var newList = [];
+      
+      for(var i = 0; i < list.length; i++) {
+        if(list[i].description.indexOf(searchTerm) > 0) {
+          newList.push(list[i]);
+        }
+      }
+
+      return newList;
+    }
+  }
+
+  /*** DIRECTIVES ************************************************************/
+  function FoundItemsDirective() {
+    var ddo = {
+      // template: "<h2>{{ title }}</h2>"
+      //   + "<ul><li ng-repeat='item in list'>"
+      //   + "<button class='btn btn-danger pull-right' ng-click='dontWant({ index: $index });'>Don't want this one!</button>"
+      //   +"<b>{{ item.name }} [{{ item.short_name }}]</b><br />"
+      //   + "Content: {{ item.description }}</li></ul>"
+      //   + "<p>{{ result }}</p>",
+      templateUrl: "itemList.html",
+      scope: {
+        list: "<",
+        title: "@title",
+        result: "@result",
+        dontWant: "&"
+      },
+      // controller: FoundItemsDirectiveController,
+      // controllerAs: "list",
+      // bindToController: true
     };
 
-    service.checkOff = function (itemIndex) {
-      itemsBought.push(itemsToBuy[itemIndex]);
-      itemsToBuy.splice(itemIndex, 1);
-    };
+    return ddo;
   }
 })();
